@@ -35,11 +35,14 @@ except Exception:
     HAS_FITZ = False
 
 try:
-    from gtts import gTTS
-    HAS_GTTS = True
+    import soundfile as sf
+    from kokoro import KPipeline
+    import numpy as np
+
+    HAS_TTS = True
 except ImportError:
-    st.warning("gTTS not installed, run: pip install gTTS")
-    HAS_GTTS = False
+    st.warning("TTS components not installed")
+    HAS_TTS = False
 
 load_dotenv()
 
@@ -151,20 +154,43 @@ def create_simple_voice_input():
 
 
 def text_to_speech(text: str) -> str:
-    if not HAS_GTTS:
-        return ""
+    """Generate speech audio from text using Kokoro TTS and return HTML <audio> tag."""
+
+    # Clean text (same as your original)
     safe_text = re.sub(r'\[.*?Page.*?\]', '', text)
-    safe_text = safe_text.replace('`', '').replace('*', '')
-    if not safe_text.strip():
+    safe_text = safe_text.replace('`', '').replace('*', '').strip()
+    if not safe_text:
         return ""
+
     try:
-        tts = gTTS(text=safe_text, lang='en')
+        # Load Kokoro (cache model to avoid reloading)
+        pipeline = KPipeline(lang_code="a")  # 'a' = American English
+
+         # Collect all chunks into one array
+        all_audio = []
+        for i, (_, _, audio) in enumerate(pipeline(safe_text, voice="af_heart")):
+            print(f"Generated chunk {i}")
+            all_audio.append(audio)
+
+        # Concatenate into one array
+        audio = np.concatenate(all_audio)
+
+        # Write one valid WAV to BytesIO
         buf = io.BytesIO()
-        tts.write_to_fp(buf)
+        sf.write(buf, audio, samplerate=24000, format="WAV")
         buf.seek(0)
-        b64 = base64.b64encode(buf.read()).decode()
-        return f"<audio autoplay style='display:none;'><source src='data:audio/mp3;base64,{b64}' type='audio/mpeg'></audio>"
-    except Exception:
+
+        # Convert to base64 for HTML embedding
+        b64 = base64.b64encode(buf.read()).decode("utf-8")
+
+        return f"""
+        <audio autoplay controls>
+            <source src="data:audio/wav;base64,{b64}" type="audio/wav">
+        </audio>
+        """
+
+    except Exception as e:
+        print("TTS error:", e)
         return ""
 
 
