@@ -364,7 +364,7 @@ def main():
             for i,m in enumerate(st.session_state.messages):
                 with st.chat_message(m['role']):
                     st.markdown(m['content'])
-                    if m['role']=='assistant' and HAS_GTTS:
+                    if m['role']=='assistant' and HAS_TTS:
                         if st.button(f"Read Aloud 🔊",key=f"speak_{i}"):
                             st.markdown(text_to_speech(m['content']),unsafe_allow_html=True)
 
