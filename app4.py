@@ -119,38 +119,82 @@ def create_page_thumbnails(pdf_path: str, max_pages=8):
 
 
 def create_simple_voice_input():
-    html = """
-    <div style="margin: 0.5rem 0;">
-        <button id="voiceButton" class="voice-button">Speak your question</button>
-        <span id="voiceStatus" class="voice-status"></span>
-    </div>
-    <script>
-    (function(){
-        const btn=document.getElementById('voiceButton');
-        const status=document.getElementById('voiceStatus');
-        if(!('webkitSpeechRecognition' in window || 'SpeechRecognition' in window)){
-            status.textContent='Speech recognition not supported';
-            btn.disabled=true;
-            return;
-        }
-        const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
-        const rec=new SR();
-        rec.continuous=false;rec.interimResults=false;rec.lang='en-US';
-        btn.onclick=()=>{try{rec.start();}catch(e){}};
-        rec.onstart=()=>{btn.textContent='Listening...';btn.style.background='linear-gradient(135deg,#ef4444,#dc2626)';status.textContent='Listening...';};
-        rec.onresult=e=>{
-            const t=e.results[0][0].transcript;
-            status.textContent='Heard: '+t;status.style.color='green';
-            const url=new URL(window.location);
-            url.searchParams.set('voice_query',t);
-            window.location.href=url.href;
-        };
-        rec.onerror=e=>{status.textContent='Error: '+e.error;status.style.color='red';};
-        rec.onend=()=>{btn.textContent='Speak your question';btn.style.background='linear-gradient(135deg,#2563eb,#1d4ed8)';};
-    })();
-    </script>
-    """
-    return html
+    """Simplified voice input with automatic query execution."""
+    if "voice_result" not in st.session_state:
+        st.session_state.voice_result = None
+    if "voice_counter" not in st.session_state:
+        st.session_state.voice_counter = 0
+
+    col1, col2 = st.columns([1, 3])
+    with col1:
+        if st.button("🎤 Speak", key="voice_btn"):
+            st.session_state.voice_counter += 1
+    with col2:
+        st.caption("Click to speak your question")
+
+    # If button was clicked, show listening UI and capture voice
+    if st.session_state.voice_counter > 0:
+        js_code = """
+        new Promise((resolve) => {
+            if (!('webkitSpeechRecognition' in window || 'SpeechRecognition' in window)) {
+                resolve(JSON.stringify({error: "Speech recognition not supported in this browser"}));
+                return;
+            }
+            const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+            const rec = new SR();
+            rec.continuous = false;
+            rec.interimResults = false;
+            rec.lang = 'en-US';
+            rec.maxAlternatives = 1;
+            
+            rec.onresult = (event) => {
+                const transcript = event.results[0][0].transcript;
+                resolve(JSON.stringify({success: true, text: transcript}));
+            };
+            
+            rec.onerror = (event) => {
+                resolve(JSON.stringify({error: "Recognition error: " + event.error}));
+            };
+            
+            rec.onend = () => {
+                // Fallback if nothing captured
+                setTimeout(() => resolve(JSON.stringify({error: "No speech detected"})), 100);
+            };
+            
+            try {
+                rec.start();
+            } catch(e) {
+                resolve(JSON.stringify({error: "Failed to start: " + e.message}));
+            }
+        });
+        """
+        
+        st.info("🎧 Listening... Speak now!")
+        result = streamlit_js_eval(js_expressions=js_code, key=f"voice_{st.session_state.voice_counter}")
+        
+        if result:
+            try:
+                data = json.loads(result)
+                if "error" in data:
+                    st.warning(f"⚠️ {data['error']}")
+                    st.session_state.voice_counter = 0
+                elif "text" in data and data["text"].strip():
+                    st.session_state.voice_result = data["text"].strip()
+                    st.session_state.voice_counter = 0
+                    st.rerun()
+            except:
+                st.session_state.voice_counter = 0
+    
+    # Return captured voice input if available
+    if st.session_state.voice_result:
+        captured = st.session_state.voice_result
+        st.session_state.voice_result = None
+        st.success(f"🗣️ Captured: **{captured}**")
+        return captured
+    
+    return None
+
+
 
 
 def text_to_speech(text: str) -> str:
@@ -368,15 +412,15 @@ def main():
                         if st.button(f"Read Aloud 🔊",key=f"speak_{i}"):
                             st.markdown(text_to_speech(m['content']),unsafe_allow_html=True)
 
+            voice_query = None
             if st.session_state.voice_enabled:
-                st.components.v1.html(create_simple_voice_input(),height=120)
+                voice_query = create_simple_voice_input()
+            
+            
 
-            qp=st.query_params
-            voice_query=qp.get('voice_query',[None])[0] if qp else None
+            
+            user_input = voice_query or st.chat_input("Ask a question about the documents...")
 
-            if voice_query:
-                st.query_params.clear()
-            user_input=voice_query or st.chat_input("Ask a question...")
 
             if user_input and not st.session_state.processing:
                 s=time.time();st.session_state.processing=True
