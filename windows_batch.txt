@@ -1,0 +1,54 @@
+@echo off
+echo ============================================
+echo  Smart Study Buddy - Quick Start
+echo ============================================
+echo.
+
+REM Check if .env exists
+if not exist .env (
+    echo [!] .env file not found!
+    echo [*] Creating .env from template...
+    copy .env.example .env
+    echo.
+    echo [!] IMPORTANT: Please edit .env and add your GEMINI_API_KEY
+    echo [*] Get your key from: https://makersuite.google.com/app/apikey
+    echo.
+    pause
+)
+
+REM Check if virtual environment exists
+if not exist venv (
+    echo [*] Creating virtual environment...
+    python -m venv venv
+    if errorlevel 1 (
+        echo [!] Error: Python not found or failed to create venv
+        echo [*] Please install Python 3.9+ from python.org
+        pause
+        exit /b 1
+    )
+)
+
+REM Activate virtual environment
+echo [*] Activating virtual environment...
+call venv\Scripts\activate.bat
+
+REM Install dependencies
+echo [*] Installing dependencies...
+pip install -r requirements.txt --quiet
+if errorlevel 1 (
+    echo [!] Error installing dependencies
+    pause
+    exit /b 1
+)
+
+REM Launch the app
+echo.
+echo ============================================
+echo  Launching Smart Study Buddy...
+echo  The app will open at http://localhost:8501
+echo ============================================
+echo.
+
+streamlit run app.py
+
+pause
