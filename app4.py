@@ -20,6 +20,7 @@ from datetime import datetime
 import plotly.graph_objects as go
 from pdf_processor import extract_text_from_pdf, chunk_text
 from vector_store import VectorStore
+from streamlit_js_eval import streamlit_js_eval
 from chat_handler import ChatHandler
 import base64
 import tempfile
@@ -34,14 +35,11 @@ except Exception:
     HAS_FITZ = False
 
 try:
-    import soundfile as sf
-    from kokoro import KPipeline
-    import numpy as np
-
-    HAS_TTS = True
+    from gtts import gTTS
+    HAS_GTTS = True
 except ImportError:
-    st.warning("TTS components not installed")
-    HAS_TTS = False
+    st.warning("gTTS not installed, run: pip install gTTS")
+    HAS_GTTS = False
 
 load_dotenv()
 
@@ -153,44 +151,22 @@ def create_simple_voice_input():
 
 
 def text_to_speech(text: str) -> str:
-    """Generate speech audio from text using Kokoro TTS and return HTML <audio> tag."""
-
-    # Clean text (same as your original)
+    if not HAS_GTTS:
+        return ""
     safe_text = re.sub(r'\[.*?Page.*?\]', '', text)
-    safe_text = safe_text.replace('`', '').replace('*', '').strip()
-    if not safe_text:
+    safe_text = safe_text.replace('`', '').replace('*', '')
+    if not safe_text.strip():
         return ""
-
     try:
-        # Load Kokoro (cache model to avoid reloading)
-        pipeline = KPipeline(lang_code="a")  # 'a' = American English
-
-         # Collect all chunks into one array
-        all_audio = []
-        for i, (_, _, audio) in enumerate(pipeline(safe_text, voice="af_heart")):
-            print(f"Generated chunk {i}")
-            all_audio.append(audio)
-
-        # Concatenate into one array
-        audio = np.concatenate(all_audio)
-
-        # Write one valid WAV to BytesIO
+        tts = gTTS(text=safe_text, lang='en')
         buf = io.BytesIO()
-        sf.write(buf, audio, samplerate=24000, format="WAV")
+        tts.write_to_fp(buf)
         buf.seek(0)
-
-        # Convert to base64 for HTML embedding
-        b64 = base64.b64encode(buf.read()).decode("utf-8")
-
-        return f"""
-        <audio autoplay controls>
-            <source src="data:audio/wav;base64,{b64}" type="audio/wav">
-        </audio>
-        """
-
-    except Exception as e:
-        print("TTS error:", e)
+        b64 = base64.b64encode(buf.read()).decode()
+        return f"<audio autoplay style='display:none;'><source src='data:audio/mp3;base64,{b64}' type='audio/mpeg'></audio>"
+    except Exception:
         return ""
+
 
 def initialize_model():
     key=os.getenv('GEMINI_API_KEY')
@@ -362,7 +338,7 @@ def main():
             for i,m in enumerate(st.session_state.messages):
                 with st.chat_message(m['role']):
                     st.markdown(m['content'])
-                    if m['role']=='assistant' and HAS_TTS:
+                    if m['role']=='assistant' and HAS_GTTS:
                         if st.button(f"Read Aloud 🔊",key=f"speak_{i}"):
                             st.markdown(text_to_speech(m['content']),unsafe_allow_html=True)
 
