@@ -1,13 +1,4 @@
-# smart_study_buddy_v3.4
-"""
-Smart Study Buddy v3.4
-Changes:
-- Structured markdown responses (clear formatting)
-- Quiz generation improved (strict JSON parsing, expandable answers)
-- Fixed voice input (modern Streamlit query param handling)
-- Cleaner chat layout
-- Retained gTTS for voice output
-"""
+
 
 import streamlit as st
 import google.generativeai as genai
@@ -27,6 +18,9 @@ import tempfile
 import time
 import json
 import io
+import warnings
+warnings.filterwarnings("ignore", message=".*use_column_width.*", category=DeprecationWarning)
+
 
 try:
     import fitz  # PyMuPDF
@@ -46,7 +40,7 @@ except ImportError:
 
 load_dotenv()
 
-st.set_page_config(page_title="Smart Study Buddy v3.4", layout="wide")
+st.set_page_config(page_title="Smart Study Buddy", layout="wide")
 
 st.markdown("""
 <style>
@@ -399,10 +393,28 @@ def main():
         left,right=st.columns([3,1])
         with right:
             st.markdown("### Page Previews")
-            for n,info in st.session_state.documents.items():
+            for n, info in st.session_state.documents.items():
                 st.markdown(f"**{n}**")
-                for p,uri in info.get('page_images',{}).items():
-                    st.image(uri,caption=f"Page {p}",use_column_width=True)
+
+                page_images = info.get('page_images', {})
+                if not page_images:
+                    st.caption("_No previews available_")
+                    continue
+
+                page_numbers = sorted(page_images.keys())
+                preview_pages = page_numbers[:5]
+                extra_pages = page_numbers[5:]
+
+    # Show first few pages directly
+                for p in preview_pages:
+                    st.image(page_images[p], caption=f"Page {p}", use_container_width=True)
+
+    # Add expander for remaining pages
+                if extra_pages:
+                    with st.expander(f"View remaining {len(extra_pages)} pages"):
+                        for p in extra_pages:
+                            st.image(page_images[p], caption=f"Page {p}", use_container_width=True)
+
 
         with left:
             for i,m in enumerate(st.session_state.messages):
